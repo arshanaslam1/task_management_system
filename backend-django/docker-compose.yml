@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  db:
+    container_name: track_db
+    image: postgres
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    env_file:
+      - .env
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+  redis:
+    image: redis:alpine
+    container_name: tracking_redis
+    restart: always
+    ports:
+        - '6379:6379'
+  djangoq:
+    build: .
+    container_name: tracking_djangoq
+    env_file:
+      - .env
+    restart: always
+    command: python manage.py qcluster
+    volumes:
+      - .:/code
+    depends_on:
+      - redis
+  web:
+    container_name: tracking_web
+    build: .
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+    restart: always
+  #  command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/code
+    #ports:
+    #  - "8000:8000"
+    expose:
+      - 8000
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+      - djangoq
+  nginx:
+      container_name: tracking_nginx
+      build: ./nginx
+      restart: always
+      ports:
+        - 80:80
+      depends_on:
+        - web

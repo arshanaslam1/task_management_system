@@ -1,0 +1,82 @@
+version: "3.4"
+
+services:
+    db:
+      container_name: tracking_db
+      image: postgres
+      volumes:
+        - ./backend-django/data/db:/var/lib/postgresql/data
+      env_file:
+        - ./backend-django/.env
+      restart: always
+      ports:
+        - "5432:5432"
+      environment:
+        - POSTGRES_DB=postgres
+        - POSTGRES_USER=postgres
+        - POSTGRES_PASSWORD=postgres
+    redis:
+      image: redis:alpine
+      container_name: tracking_redis
+      restart: always
+      ports:
+          - '6379:6379'
+    djangoq:
+      build: ./backend-django
+      container_name: tracking_djangoq
+      env_file:
+        - ./backend-django/.env
+      restart: always
+      command: python manage.py qcluster
+      volumes:
+        - ./backend-django/:/backend # maps host diretory to internal container directory
+      depends_on:
+        - redis
+    backend-django:
+      container_name: tracking_backend
+      build:
+        context: ./backend-django
+        dockerfile: ./Dockerfile
+      command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+      restart: always
+      volumes:
+        - ./backend-django/:/backend # maps host diretory to internal container directory
+      ports:
+        - "8000:8000"
+  #    expose:
+  #      - 8000
+      env_file:
+        - ./backend-django/.env
+      depends_on:
+        - db
+        - redis
+        - djangoq
+    frontend-react:
+      container_name: frontend-react
+      build:
+        context: ./frontend-react
+        dockerfile: ./Dockerfile
+      volumes:
+        - frontend-react_build:/frontend/build
+  ##    ports:
+  ##      - 3000:3000
+  #    stdin_open: true
+  #    environment:
+  #      - CHOKIDAR_USEPOLLING=true
+  #    restart: always
+  #    command: npm start
+
+    nginx:
+      image: nginx:stable-alpine
+      container_name: nginx-employee-tracking
+      ports:
+        - 80:80
+      volumes:
+        - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+        - ./backend-django/:/backend
+        - frontend-react_build:/var/www/frontend
+      depends_on:
+        - backend-django
+        - frontend-react
+volumes:
+    frontend-react_build:
